@@ -64,7 +64,6 @@ public class CobwebApplicationRunner {
 	 */
 
 	public static void main(String[] args) {
-
 		// Process Arguments
 
 		String inputFileName = "";

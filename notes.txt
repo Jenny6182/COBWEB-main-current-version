@@ -1,0 +1,2 @@
+1. investigate complex agent step function
+2. make a new plugin should do it all
