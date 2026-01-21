@@ -387,6 +387,7 @@ org/cobweb/cobweb2/plugins/food/FoodGrowth.class
 org/cobweb/cobweb2/plugins/stats/CauseTree$1.class
 org/cobweb/io/ConfDisplayName.class
 org/cobweb/cobweb2/plugins/genetics/PhenotypeIndex$1.class
+org/cobweb/cobweb2/impl/ai/Matrices.class
 org/cobweb/cobweb2/plugins/stats/CauseTree.class
 org/cobweb/cobweb2/core/StateParameter.class
 org/cobweb/swingutil/JComponentWaiter.class

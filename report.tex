@@ -2,66 +2,81 @@
 \usepackage{amsmath}
 \usepackage{amsfonts}
 \usepackage{hyperref}
-\title{Active Inference Controller Implementation in COBWEB}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\title{Active Inference Controller in COBWEB: Full Implementation Report}
 \author{Antigravity Agent}
 \date{\today}
 \begin{document}
 \maketitle
-\section{Summary of Changes}
-To implement the Active Inference agent, the following components were added to the `org.cobweb.cobweb2` package structure:
+\begin{abstract}
+This report details the implementation of a fully-featured Active Inference agent within the COBWEB simulation environment. The agent operates as a Partially Observable Markov Decision Process (POMDP) utilizing Variational Free Energy minimization for both perception (inference) and action (planning), and incorporates Active Learning to learn environmental dynamics over time.
+\end{abstract}
+\section{System Updates and Architecture}
+\subsection{Core Components}
+The implementation introduces a new AI architecture to the `org.cobweb.cobweb2.impl.ai` package:
 \begin{itemize}
-    \item \textbf{ActiveInferenceController.java}: The core logic implementing the decision loop.
-    \item \textbf{ActiveInferenceAgentParams.java}: Configuration parameters defining the agent's generative model preferences (Energy vs. Food).
-    \item \textbf{ActiveInferenceControllerParams.java}: Infrastructure for registering the controller with the simulation.
-    \item \textbf{ActiveInferencePanel.java}: Graphical User Interface (GUI) panel for configuring the agent.
+    \item \textbf{ActiveInferenceController.java}: The primary agent logic. It maintains internal matrices representing the Generative Model ($A, B, C, D$) and executes the perception-action loop.
+    \item \textbf{Matrices.java}: A newly developed utility class providing essential Tensor operations (Dot product, Matrix-Vector multiplication) and Probability functions (Softmax, Entropy, KL Divergence, Dirichlet expectations) required for the math.
+    \item \textbf{ActiveInferenceAgentParams.java}: Configuration class defining prior preferences (e.g., strength of preference for Food vs. Energy conservation).
+    \item \textbf{UI Integration}: A dedicated `ActiveInferencePanel` allows users to configure these agents directly from the simulation GUI.
 \end{itemize}
- Additionally, `AIPanel.java` and `pom.xml` were modified to integrate the new controller and update the project's Java version, respectively.
-\section{Implementation Details}
-The controller is designed as a \textbf{Reactive Active Inference} agent. It does not maintain a complex internal belief state over time (no hidden Markov model transitions) but instead treats the immediate sensory input as a reliable state estimate.
-\subsection{Inputs (Perception)}
-At each simulation tick $t$, the agent receives an observation vector $o_t$:
-\begin{align*}
-o_t &= \{ \text{VisionType}, \text{VisionDist}, \text{EnergyLevel} \}
-\end{align*}
-where $\text{VisionType} \in \{ \text{Food, Stone, Agent, Empty} \}$.
-\subsection{Action Selection}
-The agent evaluates a set of discrete actions $U = \{ \text{Step}, \text{TurnLeft}, \text{TurnRight} \}$.
-For each action $u \in U$, it calculates a value $V(u)$ and selects:
-$$ u^* = \arg \max_{u} V(u) $$
-Reproduction is explicitly disabled for these agents to isolate the active inference behavior.
-\section{Mathematical Justification}
-We formally demonstrate that the implementation constitutes an Active Inference agent minimizing Expected Free Energy ($G$).
-\subsection{Definition of Expected Free Energy}
-For a policy $\pi$ (action $u$), the Expected Free Energy $G(\pi)$ constitutes the objective function:
+\subsection{Refactoring from V1 (Reactive)}
+The initial reactive prototype (which mapped observations directly to values) has been largely replaced. The new V2 implementation maintains an explicit **Belief State** ($Q(s)$) and learns the consequences of actions, shifting from a heuristic agent to a learning model-based agent.
+\section{Mathematical Formulation}
+The agent minimizes Variational Free Energy ($F$) to approximate the posterior probability of hidden states, and minimizes Expected Free Energy ($G$) to select policies.
+\subsection{Generative Model}
+The joint probability density of observations $o$, states $s$, and policies $\pi$ is defined as:
 \begin{equation}
-G(\pi) = \underbrace{D_{KL}[Q(o,s|\pi) || P(o,s|\pi)]}_{\text{Risk / Bounds}} - \underbrace{E_{Q(o|\pi)}[\ln P(o)]}_{\text{Realizing Preferences}}
+P(o, s, \pi) = P(\pi) P(s_0) \prod_{t=1}^{T} P(o_t|s_t) P(s_t|s_{t-1}, \pi_{t-1})
 \end{equation}
-\subsection{Simplified Generative Model}
-\textbf{Assumption 1 (MDP):} The environment is fully observable or state uncertainty is negligible for local actions. Thus, beliefs $Q(s|o) \approx \delta(s-o)$. This eliminates the KL-divergence term related to state ambiguity.
-\textbf{Assumption 2 (Deterministic Physics):} The transition probabilities $P(s' | s, u)$ are effectively 1.0 for valid moves.
-Under these assumptions, $G$ simplifies to two components:
+Implemented Matrices:
+\begin{itemize}
+    \item $\mathbf{A}$ (Likelihood): $P(o|s)$, mapping hidden states (Safe, Food, Obstacle) to visual observations.
+    \item $\mathbf{B}$ (Transition): $P(s_{t+1}|s_t, u)$. This is maintained as a set of Dirichlet distributions $Dir(\mathbf{b})$, allowing the agent to learn transition probabilities from counts.
+    \item $\mathbf{C}$ (Preferences): $P(o)$, a fixed prior over observations (Agent prefers seeing Food).
+    \item $\mathbf{D}$ (Prior): $P(s_0)$, initial state beliefs.
+\end{itemize}
+\subsection{Perception (Minimizing $F$)}
+At each time step, the agent infers the hidden state $s_t$ by variational message passing (approximated as a fixed-point update):
 \begin{equation}
-G(\pi) \approx \underbrace{- \ln P(o_{predicted})}_{\text{Extrinsic Value}} - \underbrace{H[Q(o|\pi)]}_{\text{Epistemic Value}}
+Q(s_t) = \sigma \left( \underbrace{\ln \mathbf{A} \cdot o_t}_{\text{Evidence}} + \underbrace{\ln (\mathbf{B}_{u_{t-1}} \cdot Q(s_{t-1}))}_{\text{Prior}} \right)
 \end{equation}
-\subsection{Mapping to Java Implementation}
-The code calculates a `value` for each action, which corresponds to $-G(\pi)$.
-\subsubsection{Extrinsic Value (Preferences)}
-The generative model defines preferences $P(o)$ via the configuration parameters:
-$$ \ln P(\text{HighEnergy}) \propto C_{\text{energy}} $$
-$$ \ln P(\text{SeeingFood}) \propto C_{\text{food}} $$
-In `calculateStepValue`:
-\begin{verbatim}
-value += params.foodPreference * 2.0; 
-// Equivalent to: -G += 2 * ln P(Food)
-\end{verbatim}
-\subsubsection{Epistemic Value (Exploration)}
-Information gain is modeled as the utility of changing the sensory stream. A turn action, which reveals new areas of the grid, is assigned a fixed intrinsic value:
-$$ H[Q(o|\text{Turn})] \approx \text{const} $$
-In `calculateTurnValue`:
-\begin{verbatim}
-value += 0.2; // Exploration bonus
-// Equivalent to: -G += EpistemicConstant
-\end{verbatim}
-\section{Conclusion}
-The `ActiveInferenceController` minimizes a functional upper bound on surprise (Free Energy) by selecting actions that maximize Expected Free Energy (predictive fulfilment of preferences and information gain). While simplified for the grid world context, it adheres to the first principles of Active Inference.
+where $\sigma$ is the softmax function.
+\subsection{Active Learning}
+The agent learns the transition dynamics ($\mathbf{B}$) by updating Dirichlet concentration parameters $\alpha$ based on the inferred transition:
+\begin{equation}
+\alpha_{next, prev, action} \leftarrow \alpha_{next, prev, action} + \eta \cdot Q(s_{next}) \cdot Q(s_{prev})
+\end{equation}
+This allows the agent to discover environmental rules (e.g., "Moving forward into an obstacle results in staying at the obstacle state").
+\subsection{Action (Minimizing $G$)}
+Policies $\pi$ (actions) are selected to minimize Expected Free Energy $G(\pi)$:
+\begin{equation}
+G(\pi) = \sum_{\tau} G(\pi, \tau)
+\end{equation}
+The agent evaluates discrete actions $U = \{ \text{Step}, \text{TurnLeft}, \text{TurnRight}, \text{Reproduce} \}$.
+\begin{equation}
+G(\pi, \tau) \approx \underbrace{- \mathbf{E}_{Q(o|\pi)}[\ln P(o)]}_{\text{Extrinsic Value}} - \underbrace{H[Q(o|\pi)]}_{\text{Epistemic Value}}
+\end{equation}
+**Reproduction**:
+Reproduction is treated as an action that becomes attractive (low Free Energy) when the agent's internal state (Energy) exceeds a threshold, modeling a biological drive to ensure lineage survival despite the immediate energy cost.
+The code calculates:
+\begin{enumerate}
+    \item **Extrinsic**: Match between predicted observations and Preferences ($\mathbf{C}$).
+    \item **Epistemic**: Entropy of predicted observations (seeking novel states/information).
+\end{enumerate}
+\section{Justification as Active Inference}
+This implementation constitutes a faithful Active Inference agent because:
+\begin{enumerate}
+    \item **First Principles**: It does not maximize "Reward" explicitly. Instead, it minimizes divergent Probability Distributions (Free Energy). "Reward" is encoded simply as a Prior Belief ($\mathbf{C}$) that the agent works to fulfill.
+    \item **Epistemic Drive**: The inclusion of the Entropy term in $G$ means the agent is naturally curious. It will explore actions where the outcome is uncertain, distinct from standard Reinforcement Learning which requires explicit exploration noise or bonuses.
+    \item **Biological Plausibility**: The separation of Perception (State Estimation) and Action corresponds to cortical hierarchies found in biological brains.
+\end{enumerate}
+\section{Future Improvements}
+\begin{itemize}
+    \item **Temporal Depth**: Currently, the agent looks ahead only 1 step ($G$ roughly calculated for immediate future). Deep Active Inference ($t > 1$) would allow for complex path planning.
+    \item **Hierarchical Models**: Implementing a second layer of states (e.g., "Context" or "Room Type") that evolves slower than the low-level states would allow for more abstract reasoning.
+    \item **Precision Learning ($\gamma$)**: Currently, the precision of beliefs is fixed. Learning the expected precision (confidence) of observations would allow the agent to ignore noise dynamically.
+    \item **Parameter Learning for A**: While B-matrix learning is implemented, learning the A-matrix would allow the agent to learn *what* objects look like, not just how they move.
+\end{itemize}
 \end{document}
