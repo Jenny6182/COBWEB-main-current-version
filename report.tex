@@ -1,0 +1,67 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{hyperref}
+\title{Active Inference Controller Implementation in COBWEB}
+\author{Antigravity Agent}
+\date{\today}
+\begin{document}
+\maketitle
+\section{Summary of Changes}
+To implement the Active Inference agent, the following components were added to the `org.cobweb.cobweb2` package structure:
+\begin{itemize}
+    \item \textbf{ActiveInferenceController.java}: The core logic implementing the decision loop.
+    \item \textbf{ActiveInferenceAgentParams.java}: Configuration parameters defining the agent's generative model preferences (Energy vs. Food).
+    \item \textbf{ActiveInferenceControllerParams.java}: Infrastructure for registering the controller with the simulation.
+    \item \textbf{ActiveInferencePanel.java}: Graphical User Interface (GUI) panel for configuring the agent.
+\end{itemize}
+ Additionally, `AIPanel.java` and `pom.xml` were modified to integrate the new controller and update the project's Java version, respectively.
+\section{Implementation Details}
+The controller is designed as a \textbf{Reactive Active Inference} agent. It does not maintain a complex internal belief state over time (no hidden Markov model transitions) but instead treats the immediate sensory input as a reliable state estimate.
+\subsection{Inputs (Perception)}
+At each simulation tick $t$, the agent receives an observation vector $o_t$:
+\begin{align*}
+o_t &= \{ \text{VisionType}, \text{VisionDist}, \text{EnergyLevel} \}
+\end{align*}
+where $\text{VisionType} \in \{ \text{Food, Stone, Agent, Empty} \}$.
+\subsection{Action Selection}
+The agent evaluates a set of discrete actions $U = \{ \text{Step}, \text{TurnLeft}, \text{TurnRight} \}$.
+For each action $u \in U$, it calculates a value $V(u)$ and selects:
+$$ u^* = \arg \max_{u} V(u) $$
+Reproduction is explicitly disabled for these agents to isolate the active inference behavior.
+\section{Mathematical Justification}
+We formally demonstrate that the implementation constitutes an Active Inference agent minimizing Expected Free Energy ($G$).
+\subsection{Definition of Expected Free Energy}
+For a policy $\pi$ (action $u$), the Expected Free Energy $G(\pi)$ constitutes the objective function:
+\begin{equation}
+G(\pi) = \underbrace{D_{KL}[Q(o,s|\pi) || P(o,s|\pi)]}_{\text{Risk / Bounds}} - \underbrace{E_{Q(o|\pi)}[\ln P(o)]}_{\text{Realizing Preferences}}
+\end{equation}
+\subsection{Simplified Generative Model}
+\textbf{Assumption 1 (MDP):} The environment is fully observable or state uncertainty is negligible for local actions. Thus, beliefs $Q(s|o) \approx \delta(s-o)$. This eliminates the KL-divergence term related to state ambiguity.
+\textbf{Assumption 2 (Deterministic Physics):} The transition probabilities $P(s' | s, u)$ are effectively 1.0 for valid moves.
+Under these assumptions, $G$ simplifies to two components:
+\begin{equation}
+G(\pi) \approx \underbrace{- \ln P(o_{predicted})}_{\text{Extrinsic Value}} - \underbrace{H[Q(o|\pi)]}_{\text{Epistemic Value}}
+\end{equation}
+\subsection{Mapping to Java Implementation}
+The code calculates a `value` for each action, which corresponds to $-G(\pi)$.
+\subsubsection{Extrinsic Value (Preferences)}
+The generative model defines preferences $P(o)$ via the configuration parameters:
+$$ \ln P(\text{HighEnergy}) \propto C_{\text{energy}} $$
+$$ \ln P(\text{SeeingFood}) \propto C_{\text{food}} $$
+In `calculateStepValue`:
+\begin{verbatim}
+value += params.foodPreference * 2.0; 
+// Equivalent to: -G += 2 * ln P(Food)
+\end{verbatim}
+\subsubsection{Epistemic Value (Exploration)}
+Information gain is modeled as the utility of changing the sensory stream. A turn action, which reveals new areas of the grid, is assigned a fixed intrinsic value:
+$$ H[Q(o|\text{Turn})] \approx \text{const} $$
+In `calculateTurnValue`:
+\begin{verbatim}
+value += 0.2; // Exploration bonus
+// Equivalent to: -G += EpistemicConstant
+\end{verbatim}
+\section{Conclusion}
+The `ActiveInferenceController` minimizes a functional upper bound on surprise (Free Energy) by selecting actions that maximize Expected Free Energy (predictive fulfilment of preferences and information gain). While simplified for the grid world context, it adheres to the first principles of Active Inference.
+\end{document}
