@@ -78,8 +78,16 @@ public class AIPanel extends SettingsPanel {
 		add(aiSwitch);
 		add(inner);
 
-		aiSwitch.setSelectedItem(getSimpleName(p.getControllerName()));
-		tabs[aiSwitch.getSelectedIndex()].bindToParser(parser);
+        // This one was forcing the selection of simple agent??
+//		aiSwitch.setSelectedItem(getSimpleName(p.getControllerName()));
+//		tabs[aiSwitch.getSelectedIndex()].bindToParser(parser);
+
+//        Force the SimulationConfig to use Active Inference as default
+        parser.setControllerName(ActiveInferenceController.class.getName());
+
+        // Force Active Inference to appear
+        aiSwitch.setSelectedItem(ActiveInferenceController.class.getSimpleName());
+        tabs[aiSwitch.getSelectedIndex()].bindToParser(parser);
 	}
 
 	private static String getSimpleName(String qualifiedName) {
