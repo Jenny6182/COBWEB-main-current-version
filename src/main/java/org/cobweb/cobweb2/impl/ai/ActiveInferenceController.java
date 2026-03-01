@@ -25,6 +25,21 @@ import java.util.Random;
  */
 public class ActiveInferenceController implements Controller {
 
+    // Define Core model matrices
+    // Generative model
+    private double[][] A;              // Likelihood  (obs x state)
+    private double[][][] B;            // Transition  (next x prev x action)
+    private double[] C;                // Preferences (obs)
+    private double[] D;                // Prior over states
+
+    // Beliefs
+    private double[] Qs;
+    private double[] Qs_prev;
+    private int action_prev = -1;
+
+    // Learning
+    private double[][][] b_concentration;
+
     private final SimulationInternals simulation;
     private final ActiveInferenceAgentParams params;
     private final Random random;
@@ -67,6 +82,71 @@ public class ActiveInferenceController implements Controller {
 
     // ... (AIInput class) ...
 
+    // Constructor of active inference controller, cannot rely on default
+    public ActiveInferenceController(SimulationInternals simulation,
+                                     ActiveInferenceAgentParams params) {
+        this.simulation = simulation;
+        this.params = params;
+        this.random = new Random();
+
+        initializeModel();
+    }
+
+    private void initializeModel() {
+
+        // Likelihood matrix A (obs x state)
+        A = new double[][] {
+                {0.8, 0.1, 0.1},   // O_NULL
+                {0.1, 0.8, 0.1},   // O_FOOD
+                {0.1, 0.1, 0.8}    // O_OBSTACLE
+        };
+
+        // Transition matrix B (next x prev x action)
+        B = new double[NUM_STATES][NUM_STATES][NUM_ACTIONS];
+
+        for (int u = 0; u < NUM_ACTIONS; u++) {
+            for (int s = 0; s < NUM_STATES; s++) {
+                B[s][s][u] = 1.0; // identity transition
+            }
+        }
+
+        // Preferences (prefer food)
+        C = new double[] {0.0, -5.0, 5.0};
+
+        // Prior over states (uniform)
+        D = new double[] {1.0/3, 1.0/3, 1.0/3};
+
+        Qs = D.clone();
+
+        // Learning concentration parameters
+        b_concentration = new double[NUM_STATES][NUM_STATES][NUM_ACTIONS];
+    }
+
+    public class AIInput implements ControllerInput {
+
+        @Override
+        public void mutate(float adjustmentStrength) {
+            // For now, do nothing.
+            // Later you could mutate A, B, C, etc.
+        }
+    }
+
+    // Constructor for child (reproduction)
+//    public ActiveInferenceController(ActiveInferenceController parent) {
+//        this.simulation = parent.simulation;
+//        this.params = parent.params;
+//        this.random = new Random();
+//
+//        // Copy model state
+//        this.A = parent.A;
+//        this.B = parent.B;
+//        this.C = parent.C;
+//        this.D = parent.D;
+//
+//        this.b_concentration = parent.b_concentration;
+//    }
+
+
     @Override
     public void controlAgent(Agent baseAgent, ControllerListener inputCallback) {
         ComplexAgent agent = (ComplexAgent) baseAgent;
@@ -103,7 +183,7 @@ public class ActiveInferenceController implements Controller {
             // Re-normalize B occasionally
             // For performance, we might skip this every tick, but here we do it for
             // correctness
-            updateExpectations();
+//            updateExpectations(); (was not defined) this needs to be defined
         }
 
         inputCallback.beforeControl(agent, new AIInput());
@@ -132,7 +212,8 @@ public class ActiveInferenceController implements Controller {
             // We model this as a "drive" or reduced Free Energy for ensuring survival of
             // lineage
             if (u == ACTION_REPRODUCE) {
-                if (energy > params.agentParams[0].energyPreference * 40.0) { // Rough threshold based on preference
+                // Fix: there is no agentParams in params
+                if (energy > params.energyPreference * 40.0) { // Rough threshold based on preference
                     G[u] -= 5.0; // Big bonus to Reproduce if healthy
                 } else {
                     G[u] += 10.0; // High cost if unhealthy (do not reproduce)
@@ -209,11 +290,20 @@ public class ActiveInferenceController implements Controller {
 
     @Override
     public Controller createChildAsexual() {
-        return new ActiveInferenceController(this);
+        return new ActiveInferenceController(simulation, params);
     }
 
     @Override
     public Controller createChildSexual(Controller parent2) {
-        return new ActiveInferenceController(this);
+        return new ActiveInferenceController(simulation, params);
     }
+
+    protected ActiveInferenceController(ActiveInferenceController parent) {
+        this.simulation = parent.simulation;
+        this.params = parent.params;
+        this.random = new Random();
+
+        initializeModel(); // or copy matrices if you want inheritance
+    }
+
 }
