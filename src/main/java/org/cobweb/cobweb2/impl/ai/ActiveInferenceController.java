@@ -123,7 +123,7 @@ public class ActiveInferenceController implements Controller {
             }
         }
 
-// Perfect mapping between hidden state and observation
+        // Mapping between hidden state and observation
         A[O_CLEAR][STATE_CLEAR] = 1.0;
 
         A[O_FOOD_AHEAD][STATE_FOOD_AHEAD] = 1.0;
@@ -186,7 +186,6 @@ public class ActiveInferenceController implements Controller {
         B[STATE_FOOD_RIGHT][STATE_FOOD_RIGHT][ACTION_MOVE] = 1.0;
         B[STATE_FOOD_BEHIND][STATE_FOOD_BEHIND][ACTION_MOVE] = 1.0;
 
-
         // ======================
         // ACTION_LEFT (rotate CCW)
         // ======================
@@ -199,7 +198,6 @@ public class ActiveInferenceController implements Controller {
         B[STATE_FOOD_LEFT][STATE_FOOD_BEHIND][ACTION_LEFT] = 1.0;
         B[STATE_FOOD_AHEAD][STATE_FOOD_LEFT][ACTION_LEFT] = 1.0;
 
-
         // ======================
         // ACTION_RIGHT (rotate CW)
         // ======================
@@ -211,7 +209,6 @@ public class ActiveInferenceController implements Controller {
         B[STATE_FOOD_BEHIND][STATE_FOOD_LEFT][ACTION_RIGHT] = 1.0;
         B[STATE_FOOD_RIGHT][STATE_FOOD_BEHIND][ACTION_RIGHT] = 1.0;
         B[STATE_FOOD_AHEAD][STATE_FOOD_RIGHT][ACTION_RIGHT] = 1.0;
-
 
         // ======================
         // ACTION_REPRODUCE
@@ -411,24 +408,6 @@ public class ActiveInferenceController implements Controller {
         return Bu;
     }
 
-//    private int mapObservation(SeeInfo see) {
-//        int type = see.getType();
-//        // Dist needed?
-//        // Ideally state would include distance. For this simple 3-state model,
-//        // we only care if it's "Ahead" (Dist < X?).
-//        // Let's assume if we see it, it's relevant.
-//
-//        switch (type) {
-//            case Environment.FLAG_FOOD:
-//                return O_FOOD;
-//            case Environment.FLAG_STONE:
-//            case Environment.FLAG_DROP:
-//            case Environment.FLAG_AGENT:
-//                return O_OBSTACLE;
-//            default:
-//                return O_NULL;
-//        }
-//    }
 
     private int mapObservation(SeeInfo see) {
 
