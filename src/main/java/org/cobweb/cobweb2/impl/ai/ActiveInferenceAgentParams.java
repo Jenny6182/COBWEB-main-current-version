@@ -27,6 +27,7 @@ public class ActiveInferenceAgentParams implements ParameterSerializable {
     @ConfDisplayName("Food Preference")
     @ConfXMLTag("FoodPreference")
     public double foodPreference = 1.0;
+    public double curiosity = 0.5;  // default 0.5, range 0-1
 
     public ActiveInferenceAgentParams(SimulationParams simParam) {
         // Initialize with sim params if needed in future
