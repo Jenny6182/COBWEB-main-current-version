@@ -9,6 +9,8 @@ import org.cobweb.cobweb2.core.SimulationInternals;
 import org.cobweb.cobweb2.impl.ComplexAgent;
 import org.cobweb.cobweb2.plugins.vision.SeeInfo;
 import org.cobweb.cobweb2.plugins.vision.VisionState;
+
+import java.util.Arrays;
 import java.util.Random;
 
 /**
@@ -44,25 +46,41 @@ public class ActiveInferenceController implements Controller {
     private final ActiveInferenceAgentParams params;
     private final Random random;
 
-    // --- State Space Definitions ---
+    // --- Old State Space Definitions ---
+    // This doesn't work because doesn't reflect spatial structure
+    // so will be replaced by other state encoding
     // Hidden States (S):
     // 0: Safe/Empty
     // 1: Food Ahead
     // 2: Wall/Agent Ahead (Obstacle)
-    private static final int NUM_STATES = 3;
-    private static final int S_SAFE = 0;
-    private static final int S_FOOD = 1;
-    private static final int S_OBSTACLE = 2;
 
     // Observations (O):
     // 0: See Nothing
     // 1: See Food
     // 2: See Obstacle (Stone/Agent/Drop)
     // Note: Energy is handled separately as a continuous preference in C
-    private static final int NUM_OBS = 3;
-    private static final int O_NULL = 0;
-    private static final int O_FOOD = 1;
-    private static final int O_OBSTACLE = 2;
+
+    // --- New Hidden States Encoding (S) ---
+    static final int STATE_CLEAR = 0;
+    static final int STATE_FOOD_AHEAD = 1;
+    static final int STATE_FOOD_LEFT = 2;
+    static final int STATE_FOOD_RIGHT = 3;
+    static final int STATE_FOOD_BEHIND = 4;
+    static final int STATE_OBSTACLE_AHEAD = 5;
+
+    static final int NUM_STATES = 6;
+
+    // --- New Observations (O) ---
+    // This doesn't work because doesn't reflect spatial structure
+    // so will be replaced by other state encoding
+    static final int O_CLEAR = 0;
+    static final int O_FOOD_AHEAD = 1;
+    static final int O_FOOD_LEFT = 2;
+    static final int O_FOOD_RIGHT = 3;
+    static final int O_FOOD_BEHIND = 4;
+    static final int O_OBSTACLE_AHEAD = 5;
+
+    static final int NUM_OBS = 6;
 
     // Actions (U):
     private static final int NUM_ACTIONS = 4;
@@ -90,37 +108,120 @@ public class ActiveInferenceController implements Controller {
         this.random = new Random();
 
         initializeModel();
+
+        System.out.println("Active Inference controller created!");
     }
 
     private void initializeModel() {
 
         // Likelihood matrix A (obs x state)
-        A = new double[][] {
-                {0.8, 0.1, 0.1},   // O_NULL
-                {0.1, 0.8, 0.1},   // O_FOOD
-                {0.1, 0.1, 0.8}    // O_OBSTACLE
-        };
+        A = new double[NUM_OBS][NUM_STATES];
 
-        // Transition matrix B (next x prev x action)
-        B = new double[NUM_STATES][NUM_STATES][NUM_ACTIONS];
-
-        for (int u = 0; u < NUM_ACTIONS; u++) {
+        for (int o = 0; o < NUM_OBS; o++) {
             for (int s = 0; s < NUM_STATES; s++) {
-                B[s][s][u] = 1.0; // identity transition
+                A[o][s] = 0.0;
             }
         }
 
+// Perfect mapping between hidden state and observation
+        A[O_CLEAR][STATE_CLEAR] = 1.0;
+
+        A[O_FOOD_AHEAD][STATE_FOOD_AHEAD] = 1.0;
+        A[O_FOOD_LEFT][STATE_FOOD_LEFT] = 1.0;
+        A[O_FOOD_RIGHT][STATE_FOOD_RIGHT] = 1.0;
+        A[O_FOOD_BEHIND][STATE_FOOD_BEHIND] = 1.0;
+
+        A[O_OBSTACLE_AHEAD][STATE_OBSTACLE_AHEAD] = 1.0;
+
+        // Transition matrix B (next x prev x action), this dictates belief
+        B = new double[NUM_STATES][NUM_STATES][NUM_ACTIONS];
+
+        initializeTransitionModel();
+
         // Preferences (prefer food)
-        C = new double[] {0.0, -5.0, 5.0};
+        //changed from (0, -5, 5) to (0, -15, 10)
+//        C = new double[] {0.0, -15.0, 10.0};
+        C = new double[]{
+                0.0,   // CLEAR
+                -20.0,  // FOOD_AHEAD (strongly preferred)
+                0.0,   // FOOD_LEFT
+                0.0,   // FOOD_RIGHT
+                0.0,   // FOOD_BEHIND
+                10.0   // OBSTACLE_AHEAD (bad)
+        };
 
         // Prior over states (uniform)
-        D = new double[] {1.0/3, 1.0/3, 1.0/3};
+        D = new double[NUM_STATES];
+        for (int i = 0; i < NUM_STATES; i++) {
+            D[i] = 1.0 / NUM_STATES;
+        }
 
         Qs = D.clone();
 
         // Learning concentration parameters
         b_concentration = new double[NUM_STATES][NUM_STATES][NUM_ACTIONS];
     }
+
+    // Used to initialize matrix B (belief)
+    private void initializeTransitionModel() {
+
+        // Zero everything
+        for (int u = 0; u < NUM_ACTIONS; u++) {
+            for (int next = 0; next < NUM_STATES; next++) {
+                for (int prev = 0; prev < NUM_STATES; prev++) {
+                    B[next][prev][u] = 0.0;
+                }
+            }
+        }
+
+        // ======================
+        // ACTION_MOVE
+        // ======================
+
+        B[STATE_CLEAR][STATE_CLEAR][ACTION_MOVE] = 1.0;
+        B[STATE_CLEAR][STATE_FOOD_AHEAD][ACTION_MOVE] = 1.0;
+        B[STATE_OBSTACLE_AHEAD][STATE_OBSTACLE_AHEAD][ACTION_MOVE] = 1.0;
+
+        B[STATE_FOOD_LEFT][STATE_FOOD_LEFT][ACTION_MOVE] = 1.0;
+        B[STATE_FOOD_RIGHT][STATE_FOOD_RIGHT][ACTION_MOVE] = 1.0;
+        B[STATE_FOOD_BEHIND][STATE_FOOD_BEHIND][ACTION_MOVE] = 1.0;
+
+
+        // ======================
+        // ACTION_LEFT (rotate CCW)
+        // ======================
+
+        B[STATE_CLEAR][STATE_CLEAR][ACTION_LEFT] = 1.0;
+        B[STATE_OBSTACLE_AHEAD][STATE_OBSTACLE_AHEAD][ACTION_LEFT] = 1.0;
+
+        B[STATE_FOOD_RIGHT][STATE_FOOD_AHEAD][ACTION_LEFT] = 1.0;
+        B[STATE_FOOD_BEHIND][STATE_FOOD_RIGHT][ACTION_LEFT] = 1.0;
+        B[STATE_FOOD_LEFT][STATE_FOOD_BEHIND][ACTION_LEFT] = 1.0;
+        B[STATE_FOOD_AHEAD][STATE_FOOD_LEFT][ACTION_LEFT] = 1.0;
+
+
+        // ======================
+        // ACTION_RIGHT (rotate CW)
+        // ======================
+
+        B[STATE_CLEAR][STATE_CLEAR][ACTION_RIGHT] = 1.0;
+        B[STATE_OBSTACLE_AHEAD][STATE_OBSTACLE_AHEAD][ACTION_RIGHT] = 1.0;
+
+        B[STATE_FOOD_LEFT][STATE_FOOD_AHEAD][ACTION_RIGHT] = 1.0;
+        B[STATE_FOOD_BEHIND][STATE_FOOD_LEFT][ACTION_RIGHT] = 1.0;
+        B[STATE_FOOD_RIGHT][STATE_FOOD_BEHIND][ACTION_RIGHT] = 1.0;
+        B[STATE_FOOD_AHEAD][STATE_FOOD_RIGHT][ACTION_RIGHT] = 1.0;
+
+
+        // ======================
+        // ACTION_REPRODUCE
+        // ======================
+
+        for (int s = 0; s < NUM_STATES; s++) {
+            B[s][s][ACTION_REPRODUCE] = 1.0;
+        }
+    }
+
 
     public class AIInput implements ControllerInput {
 
@@ -149,7 +250,12 @@ public class ActiveInferenceController implements Controller {
 
     @Override
     public void controlAgent(Agent baseAgent, ControllerListener inputCallback) {
+
+        System.out.println("AI tick");
+
         ComplexAgent agent = (ComplexAgent) baseAgent;
+
+
 
         // --- 1. Persevere (Perception) ---
         SeeInfo seeInfo = agent.getState(VisionState.class).distanceLook();
@@ -199,12 +305,22 @@ public class ActiveInferenceController implements Controller {
             // 1. Extrinsic Value (Preferences)
             double extrinsic = -Matrices.dot(predictedObs, C);
 
-            // 2. Epistemic Value (Exploration)
-            double epistemic = -0.5 * Matrices.entropy(predictedObs);
+            // 2. Epistemic Value (Exploration) (changed from -0.5 to -0.1 to try to discourage curiosity)
+//            double epistemic = -0.1 * Matrices.entropy(predictedObs); // this was fixed, change to adjustable
+            // new:
+            double curiosityFactor = params.curiosity;  // from this agent's params
+            double epistemic = -curiosityFactor * Matrices.entropy(predictedObs);
+            // TODO: add a row in the ActiveInferencePanel so this parameter is adjustable
+
+            System.out.println("extrinsic: " + extrinsic);
+            System.out.println("epistemic: " + epistemic);
 
             // Heuristics for planning biases
+            G[u] = extrinsic + epistemic;
+
             if (u == ACTION_LEFT || u == ACTION_RIGHT) {
-                G[u] -= 0.5; // Turn bonus
+                G[u] += 0.2; // Turn bonus;
+                // changed from -= 0.5 to +=0.2
             }
 
             // Reproduction Drive:
@@ -218,21 +334,46 @@ public class ActiveInferenceController implements Controller {
                 } else {
                     G[u] += 10.0; // High cost if unhealthy (do not reproduce)
                 }
+                System.out.println("G[" + u + "] = " + G[u]);
+
             }
 
-            G[u] = extrinsic + epistemic;
+            System.out.println(Arrays.toString(predictedState));
         }
 
-        // --- 4. Selection ---
-        int selectedAction = 0;
-        double minG = Double.MAX_VALUE;
+
+        // --- 4. Selection (Softmax) ---
+
+        double temperature = 1.0;  // try 0.5 if too random
+
+        double sum = 0.0;
+        double[] probs = new double[NUM_ACTIONS];
+
+        // Convert G (cost) to probabilities
         for (int u = 0; u < NUM_ACTIONS; u++) {
-            double val = G[u] + (random.nextDouble() * 0.1);
-            if (val < minG) {
-                minG = val;
+            probs[u] = Math.exp(-G[u] / temperature);
+            sum += probs[u];
+        }
+
+        // Normalize
+        for (int u = 0; u < NUM_ACTIONS; u++) {
+            probs[u] /= sum;
+        }
+
+        // Sample
+        double r = random.nextDouble();
+        double cumulative = 0.0;
+        int selectedAction = 0;
+
+        for (int u = 0; u < NUM_ACTIONS; u++) {
+            cumulative += probs[u];
+            if (r < cumulative) {
                 selectedAction = u;
+                break;
             }
         }
+
+        System.out.println("Selected action: " + selectedAction);
 
         // --- 5. Execute ---
         // Reset flags
@@ -259,6 +400,7 @@ public class ActiveInferenceController implements Controller {
         }
     }
 
+
     private double[][] BForAction(int u) {
         double[][] Bu = new double[NUM_STATES][NUM_STATES];
         for (int next = 0; next < NUM_STATES; next++) {
@@ -269,23 +411,48 @@ public class ActiveInferenceController implements Controller {
         return Bu;
     }
 
-    private int mapObservation(SeeInfo see) {
-        int type = see.getType();
-        // Dist needed?
-        // Ideally state would include distance. For this simple 3-state model,
-        // we only care if it's "Ahead" (Dist < X?).
-        // Let's assume if we see it, it's relevant.
+//    private int mapObservation(SeeInfo see) {
+//        int type = see.getType();
+//        // Dist needed?
+//        // Ideally state would include distance. For this simple 3-state model,
+//        // we only care if it's "Ahead" (Dist < X?).
+//        // Let's assume if we see it, it's relevant.
+//
+//        switch (type) {
+//            case Environment.FLAG_FOOD:
+//                return O_FOOD;
+//            case Environment.FLAG_STONE:
+//            case Environment.FLAG_DROP:
+//            case Environment.FLAG_AGENT:
+//                return O_OBSTACLE;
+//            default:
+//                return O_NULL;
+//        }
+//    }
 
-        switch (type) {
-            case Environment.FLAG_FOOD:
-                return O_FOOD;
-            case Environment.FLAG_STONE:
-            case Environment.FLAG_DROP:
-            case Environment.FLAG_AGENT:
-                return O_OBSTACLE;
-            default:
-                return O_NULL;
+    private int mapObservation(SeeInfo see) {
+
+        int type = see.getType();
+        int dx = see.getDx();
+        int dy = see.getDy();
+
+        if (type == Environment.FLAG_FOOD) {
+
+            if (dx == 0 && dy < 0) return O_FOOD_AHEAD;
+            if (dx < 0 && dy == 0) return O_FOOD_LEFT;
+            if (dx > 0 && dy == 0) return O_FOOD_RIGHT;
+            if (dx == 0 && dy > 0) return O_FOOD_BEHIND;
+
         }
+
+        if (type == Environment.FLAG_STONE ||
+                type == Environment.FLAG_DROP ||
+                type == Environment.FLAG_AGENT) {
+
+            if (dx == 0 && dy < 0) return O_OBSTACLE_AHEAD;
+        }
+
+        return O_CLEAR;
     }
 
     @Override

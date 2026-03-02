@@ -13,26 +13,41 @@ public class SeeInfo implements AgentState {
 
 	private final int maxDistance;
 
+    // New fields: relative coordinates used for Active Inference
+    // and other potentially useful models
+    private final int dx;  // relative x from agent
+    private final int dy;  // relative y from agent
+
 	/**
 	 * Contains the information of what the agent sees.
 	 *
 	 * @param d Distance to t.
 	 * @param t Type of object seen.
 	 * @param maxd Maximum distance the agent is able to see.
+     * @param dx Relative x coordinate from agent
+     * @param dy Relative y coordinate from agent
 	 */
-	public SeeInfo(int d, int t, int maxd) {
+	public SeeInfo(int d, int t, int maxd, int dx, int dy) {
 		maxDistance = maxd;
 		dist = d;
 		type = t;
+        // modified to store extra information used for agent models
+        this.dx = dx;
+        this.dy = dy;
 	}
+
+    // Old Constructor
+    public SeeInfo(int d, int t, int maxd) {
+        this(d, t, maxd, 0, 0); // default dx, dy = 0
+    }
 
 	/**
 	 * Agent sees nothing.
 	 * @param maxd Maximum distance the agent can see
 	 */
-	public SeeInfo(int maxd) {
-		this(maxd, 0, maxd);
-	}
+    public SeeInfo(int maxd) {
+        this(maxd, 0, maxd, 0, 0);
+    }
 
 	/**
 	 * @return How far away the object is.
@@ -55,7 +70,20 @@ public class SeeInfo implements AgentState {
 		return maxDistance;
 	}
 
-	@Override
+    // New getters that is used for active inference agent, and potentially
+    // might be useful for future agent types / models
+    // class VisionState was modified to be consistent with this implementation,
+    // it has a modified distanceLook() that computes dx dy and store this in SeeInfo
+    public int getDx() {
+        return dx;
+    }
+
+    public int getDy() {
+        return dy;
+    }
+
+
+    @Override
 	public boolean isTransient() {
 		return true;
 	}
