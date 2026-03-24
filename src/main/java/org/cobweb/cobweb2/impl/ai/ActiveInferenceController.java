@@ -22,12 +22,11 @@ import java.util.Random;
  * - Active Learning: Updates B-Matrix counts based on experience.
  * - Variational Inference: Minimizes Free Energy to infer states.
  * - Planning: Minimizes Expected Free Energy to select policies.
- * 
- * Reproduction is EXPLICITLY DISABLED.
+ *
  */
 public class ActiveInferenceController implements Controller {
 
-    // Define Core model matrices
+    // Define core model matrices
     // Generative model
     private double[][] A;              // Likelihood  (obs x state)
     private double[][][] B;            // Transition  (next x prev x action)
@@ -42,18 +41,18 @@ public class ActiveInferenceController implements Controller {
     // Learning
     private double[][][] b_concentration;
 
+    // Other variables
     private final SimulationInternals simulation;
     private final ActiveInferenceAgentParams params;
     private final Random random;
 
-    // --- Old State Space Definitions ---
+    // --- Old State Space Definitions (Disregard this) ---
     // This doesn't work because doesn't reflect spatial structure
     // so will be replaced by other state encoding
     // Hidden States (S):
     // 0: Safe/Empty
     // 1: Food Ahead
     // 2: Wall/Agent Ahead (Obstacle)
-
     // Observations (O):
     // 0: See Nothing
     // 1: See Food
@@ -71,8 +70,6 @@ public class ActiveInferenceController implements Controller {
     static final int NUM_STATES = 6;
 
     // --- New Observations (O) ---
-    // This doesn't work because doesn't reflect spatial structure
-    // so will be replaced by other state encoding
     static final int O_CLEAR = 0;
     static final int O_FOOD_AHEAD = 1;
     static final int O_FOOD_LEFT = 2;
@@ -90,17 +87,9 @@ public class ActiveInferenceController implements Controller {
     private static final int ACTION_RIGHT = 2;
     private static final int ACTION_REPRODUCE = 3;
 
-    // ... (Generative Model Parameters remain same) ...
 
-    // ... (Constructor remains same) ...
 
-    // ... (initializeModel remains same) ...
-
-    // ... (updateExpectations remains same) ...
-
-    // ... (AIInput class) ...
-
-    // Constructor of active inference controller, cannot rely on default
+    // Constructor of active inference controller
     public ActiveInferenceController(SimulationInternals simulation,
                                      ActiveInferenceAgentParams params) {
         this.simulation = simulation;
@@ -113,25 +102,33 @@ public class ActiveInferenceController implements Controller {
     }
 
     private void initializeModel() {
-
         // Likelihood matrix A (obs x state)
         A = new double[NUM_OBS][NUM_STATES];
 
+        // Small base probability everywhere
         for (int o = 0; o < NUM_OBS; o++) {
             for (int s = 0; s < NUM_STATES; s++) {
-                A[o][s] = 0.0;
+                A[o][s] = 0.05;
             }
         }
 
-        // Mapping between hidden state and observation
-        A[O_CLEAR][STATE_CLEAR] = 1.0;
+        // Strong but non-deterministic mapping between hidden state and observation
+        // this is to reflect "noise" in observations
+        A[O_CLEAR][STATE_CLEAR] = 0.8;
 
-        A[O_FOOD_AHEAD][STATE_FOOD_AHEAD] = 1.0;
-        A[O_FOOD_LEFT][STATE_FOOD_LEFT] = 1.0;
-        A[O_FOOD_RIGHT][STATE_FOOD_RIGHT] = 1.0;
-        A[O_FOOD_BEHIND][STATE_FOOD_BEHIND] = 1.0;
+        A[O_FOOD_AHEAD][STATE_FOOD_AHEAD] = 0.8;
+        A[O_FOOD_LEFT][STATE_FOOD_LEFT] = 0.8;
+        A[O_FOOD_RIGHT][STATE_FOOD_RIGHT] = 0.8;
+        A[O_FOOD_BEHIND][STATE_FOOD_BEHIND] = 0.8;
 
-        A[O_OBSTACLE_AHEAD][STATE_OBSTACLE_AHEAD] = 1.0;
+        A[O_OBSTACLE_AHEAD][STATE_OBSTACLE_AHEAD] = 0.8;
+
+        // Normalize each column
+        for (int s = 0; s < NUM_STATES; s++) {
+            double sum = 0.0;
+            for (int o = 0; o < NUM_OBS; o++) sum += A[o][s];
+            for (int o = 0; o < NUM_OBS; o++) A[o][s] /= sum;
+        }
 
         // Transition matrix B (next x prev x action), this dictates belief
         B = new double[NUM_STATES][NUM_STATES][NUM_ACTIONS];
@@ -139,11 +136,9 @@ public class ActiveInferenceController implements Controller {
         initializeTransitionModel();
 
         // Preferences (prefer food)
-        //changed from (0, -5, 5) to (0, -15, 10)
-//        C = new double[] {0.0, -15.0, 10.0};
         C = new double[]{
                 0.0,   // CLEAR
-                -20.0,  // FOOD_AHEAD (strongly preferred)
+                -20.0,  // FOOD_AHEAD (strongly preferred, this is when agent sees food in front of them)
                 0.0,   // FOOD_LEFT
                 0.0,   // FOOD_RIGHT
                 0.0,   // FOOD_BEHIND
@@ -174,11 +169,8 @@ public class ActiveInferenceController implements Controller {
             }
         }
 
-        // ======================
-        // ACTION_MOVE
-        // ======================
-
-        B[STATE_CLEAR][STATE_CLEAR][ACTION_MOVE] = 1.0;
+        // ------- ACTION_MOVE -------
+        B[STATE_CLEAR][STATE_CLEAR][ACTION_MOVE] = 0.9;
         B[STATE_CLEAR][STATE_FOOD_AHEAD][ACTION_MOVE] = 1.0;
         B[STATE_OBSTACLE_AHEAD][STATE_OBSTACLE_AHEAD][ACTION_MOVE] = 1.0;
 
@@ -186,10 +178,26 @@ public class ActiveInferenceController implements Controller {
         B[STATE_FOOD_RIGHT][STATE_FOOD_RIGHT][ACTION_MOVE] = 1.0;
         B[STATE_FOOD_BEHIND][STATE_FOOD_BEHIND][ACTION_MOVE] = 1.0;
 
-        // ======================
-        // ACTION_LEFT (rotate CCW)
-        // ======================
+        // --- Add stochasticity to movement (smoothing) ---
+        // this controls the amount of randomness
+        for (int u = 0; u < NUM_ACTIONS; u++) {
+            for (int prev = 0; prev < NUM_STATES; prev++) {
+                double sum = 0.0;
+                // Add a small amount of noise for stochasticity
+                for (int next = 0; next < NUM_STATES; next++) {
+                    B[next][prev][u] += random.nextDouble() * 0.02; // Control the noise (less noise)
+                    sum += B[next][prev][u];
+                }
 
+                // Normalize so the probabilities sum to 1
+                for (int next = 0; next < NUM_STATES; next++) {
+                    B[next][prev][u] /= sum;
+                }
+            }
+        }
+
+
+        // ------- ACTION_LEFT (rotate CCW) -------
         B[STATE_CLEAR][STATE_CLEAR][ACTION_LEFT] = 1.0;
         B[STATE_OBSTACLE_AHEAD][STATE_OBSTACLE_AHEAD][ACTION_LEFT] = 1.0;
 
@@ -198,10 +206,8 @@ public class ActiveInferenceController implements Controller {
         B[STATE_FOOD_LEFT][STATE_FOOD_BEHIND][ACTION_LEFT] = 1.0;
         B[STATE_FOOD_AHEAD][STATE_FOOD_LEFT][ACTION_LEFT] = 1.0;
 
-        // ======================
-        // ACTION_RIGHT (rotate CW)
-        // ======================
 
+        // ------- ACTION_RIGHT (rotate CW) -------
         B[STATE_CLEAR][STATE_CLEAR][ACTION_RIGHT] = 1.0;
         B[STATE_OBSTACLE_AHEAD][STATE_OBSTACLE_AHEAD][ACTION_RIGHT] = 1.0;
 
@@ -210,10 +216,8 @@ public class ActiveInferenceController implements Controller {
         B[STATE_FOOD_RIGHT][STATE_FOOD_BEHIND][ACTION_RIGHT] = 1.0;
         B[STATE_FOOD_AHEAD][STATE_FOOD_RIGHT][ACTION_RIGHT] = 1.0;
 
-        // ======================
-        // ACTION_REPRODUCE
-        // ======================
 
+        // ------- ACTION_REPRODUCE -------
         for (int s = 0; s < NUM_STATES; s++) {
             B[s][s][ACTION_REPRODUCE] = 1.0;
         }
@@ -249,12 +253,9 @@ public class ActiveInferenceController implements Controller {
     public void controlAgent(Agent baseAgent, ControllerListener inputCallback) {
 
         System.out.println("AI tick");
-
         ComplexAgent agent = (ComplexAgent) baseAgent;
 
-
-
-        // --- 1. Persevere (Perception) ---
+        // --- 1. Perception ---
         SeeInfo seeInfo = agent.getState(VisionState.class).distanceLook();
         int obsIdx = mapObservation(seeInfo);
         double energy = (double) agent.getEnergy();
@@ -262,20 +263,48 @@ public class ActiveInferenceController implements Controller {
         // Variational Inference (Belief Updating)
         double[] prior;
         if (Qs_prev != null && action_prev != -1) {
-            prior = Matrices.multiply(BForAction(action_prev), Qs_prev);
+            prior = Matrices.multiply(BForAction(action_prev), Qs_prev);  // B * Qs_prev for prediction
         } else {
-            prior = D;
+            prior = D;  // Use uniform prior if no previous belief exists
         }
 
+        // Calculate the likelihood based on the observation
         double[] likelihood = new double[NUM_STATES];
         for (int s = 0; s < NUM_STATES; s++) {
-            likelihood[s] = A[obsIdx][s];
+            likelihood[s] = A[obsIdx][s];  // Likelihood of seeing the observation given the state
         }
 
-        double[] posterior = Matrices.multiplyElementwise(prior, likelihood);
+        // Bayesian update: posterior = prior * likelihood
+        double[] posterior = new double[NUM_STATES];
+        for (int s = 0; s < NUM_STATES; s++) {
+            posterior[s] = prior[s] * likelihood[s];  // Element-wise multiplication
+        }
+
+        // Normalize the posterior to ensure it sums to 1 (this makes it a valid probability distribution)
         Qs = Matrices.normalize(posterior);
 
-        // --- 2. Learning (Update B) ---
+
+        // --- 2. Dynamic Curiosity Adjustment (if curiosityFixed is 0) ---
+        if (!params.curiosityFixed) { // do curiosity adjustment if curiosity is NOT fixed (so curiosityFixed = False)
+            // Calculate entropy of the belief state (Qs)
+            double uncertainty = Matrices.entropy(Qs);  // Entropy of the belief state
+
+            // If uncertainty is high, increase curiosity to encourage exploration
+            if (uncertainty > 0.7) {  // High entropy -> high uncertainty
+                double newCuriosity = Math.min(params.curiosity + 0.05, 1.0);  // Increase curiosity but cap at 1.0
+                params.curiosity = newCuriosity;  // Update the curiosity in the controller's params
+            }
+
+            // If uncertainty is low, decrease curiosity to focus more on exploiting known knowledge
+            else if (uncertainty < 0.3) {  // Low entropy -> high certainty
+                double newCuriosity = Math.max(params.curiosity - 0.05, 0.0);  // Decrease curiosity but cap at 0.0
+                params.curiosity = newCuriosity;  // Update the curiosity in the controller's params
+            }
+        }
+
+        System.out.println("Curiosity: " + params.curiosity);
+
+        // --- 3. Learning (updating B) ---
         if (Qs_prev != null && action_prev != -1) {
             double learningRate = 1.0;
             for (int next = 0; next < NUM_STATES; next++) {
@@ -283,15 +312,11 @@ public class ActiveInferenceController implements Controller {
                     b_concentration[next][prev][action_prev] += learningRate * Qs[next] * Qs_prev[prev];
                 }
             }
-            // Re-normalize B occasionally
-            // For performance, we might skip this every tick, but here we do it for
-            // correctness
-//            updateExpectations(); (was not defined) this needs to be defined
         }
 
         inputCallback.beforeControl(agent, new AIInput());
 
-        // --- 3. Planning (Action Selection) ---
+        // --- 4. Planning (Action Selection) ---
         double[] G = new double[NUM_ACTIONS];
 
         for (int u = 0; u < NUM_ACTIONS; u++) {
@@ -302,12 +327,9 @@ public class ActiveInferenceController implements Controller {
             // 1. Extrinsic Value (Preferences)
             double extrinsic = -Matrices.dot(predictedObs, C);
 
-            // 2. Epistemic Value (Exploration) (changed from -0.5 to -0.1 to try to discourage curiosity)
-//            double epistemic = -0.1 * Matrices.entropy(predictedObs); // this was fixed, change to adjustable
-            // new:
-            double curiosityFactor = params.curiosity;  // from this agent's params
+            // 2. Epistemic Value (Exploration)
+            double curiosityFactor = params.curiosity;  // using this agent's params, we adjust curiosity
             double epistemic = -curiosityFactor * Matrices.entropy(predictedObs);
-            // TODO: add a row in the ActiveInferencePanel so this parameter is adjustable
 
             System.out.println("extrinsic: " + extrinsic);
             System.out.println("epistemic: " + epistemic);
@@ -322,8 +344,7 @@ public class ActiveInferenceController implements Controller {
 
             // Reproduction Drive:
             // If energy > 80 (implied max ~100 or params), reproduction is highly preferred
-            // We model this as a "drive" or reduced Free Energy for ensuring survival of
-            // lineage
+            // We model this as a "drive" or reduced Free Energy for ensuring survival of lineage
             if (u == ACTION_REPRODUCE) {
                 // Fix: there is no agentParams in params
                 if (energy > params.energyPreference * 40.0) { // Rough threshold based on preference
@@ -332,15 +353,12 @@ public class ActiveInferenceController implements Controller {
                     G[u] += 10.0; // High cost if unhealthy (do not reproduce)
                 }
                 System.out.println("G[" + u + "] = " + G[u]);
-
             }
-
             System.out.println(Arrays.toString(predictedState));
         }
 
 
         // --- 4. Selection (Softmax) ---
-
         double temperature = 1.0;  // try 0.5 if too random
 
         double sum = 0.0;
@@ -370,7 +388,9 @@ public class ActiveInferenceController implements Controller {
             }
         }
 
+        // for debugging
         System.out.println("Selected action: " + selectedAction);
+
 
         // --- 5. Execute ---
         // Reset flags

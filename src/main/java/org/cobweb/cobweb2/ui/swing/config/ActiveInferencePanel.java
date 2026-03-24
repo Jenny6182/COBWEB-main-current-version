@@ -27,47 +27,13 @@ public class ActiveInferencePanel extends SettingsPanel {
     public void bindToParser(SimulationConfig p) {
         if (!(p.controllerParams instanceof ActiveInferenceControllerParams)) {
             p.setControllerName(ActiveInferenceController.class.getName());
-            // If existing params match type, keep them, else SimulationConfig created new
-            // defaults
-            if (params != null)
-                p.controllerParams = params;
         }
+
+        // ALWAYS use the params from SimulationConfig (source of truth)
         params = (ActiveInferenceControllerParams) p.controllerParams;
+
         updateBoxes();
     }
-//
-//    private void updateBoxes() {
-//        setLayout(new BorderLayout());
-//        this.removeAll();
-//
-//        JPanel agentPanel = new JPanel();
-//        agentPanel.setLayout(new BorderLayout());
-//        Util.makeGroupPanel(agentPanel, "Active Inference Parameters");
-//
-//        final MixedValueJTable agentParamTable = new MixedValueJTable(
-//                new ConfigTableModel(params.agentParams, "Agent "));
-//
-//        TableColumnModel agParamColModel = agentParamTable.getColumnModel();
-//        agParamColModel.getColumn(0).setPreferredWidth(200);
-//
-//        // Buttons panel
-//        JPanel buttons = new JPanel(new GridLayout(1, params.agentParams.length));
-//
-//        for (int i = 0; i < params.agentParams.length; i++) {
-//            JButton newSeedButton = new JButton(new NewSeedAction(i));
-//            buttons.add(newSeedButton);
-//        }
-//
-//        this.add(buttons, BorderLayout.SOUTH);
-//
-//        Util.colorHeaders(agentParamTable, true, agentColors);
-//        JScrollPane agentScroll = new JScrollPane(agentParamTable);
-//
-//        agentPanel.add(agentScroll, BorderLayout.CENTER);
-//
-//        this.add(agentPanel, BorderLayout.CENTER);
-//    }
-
 
     private void updateBoxes() {
         setLayout(new BorderLayout());
@@ -103,13 +69,34 @@ public class ActiveInferencePanel extends SettingsPanel {
 
         this.add(buttons, BorderLayout.SOUTH);
 
+        // Add the curiosity checkbox panel
+        JPanel curiosityPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JCheckBox curiosityCheckBox = new JCheckBox("Fixed Curiosity Mode");
+
+        // Set checkbox based on FIRST agent (assume all same initially)
+        curiosityCheckBox.setSelected(params.agentParams[0].curiosityFixed);
+
+        // When toggled → update ALL agents
+        curiosityCheckBox.addActionListener(e -> {
+            boolean isChecked = curiosityCheckBox.isSelected();
+
+            for (int i = 0; i < params.agentParams.length; i++) {
+                params.agentParams[i].curiosityFixed = isChecked;
+            }
+
+            System.out.println("Curiosity Fixed (all agents): " + isChecked);
+        });
+
+        curiosityPanel.add(curiosityCheckBox);
+        this.add(curiosityPanel, BorderLayout.NORTH); // Add the panel to the top of your UI
+
         revalidate();
         repaint();
     }
 
     private final class NewSeedAction extends AbstractAction {
 
-        private final int type;
+        private final int type; // indicate which agent type's seed is being changed
         private final MixedValueJTable agentParamTable;
         private static final long serialVersionUID = 1L;
 
@@ -122,9 +109,12 @@ public class ActiveInferencePanel extends SettingsPanel {
         @Override
         public void actionPerformed(ActionEvent e) {
             Random r = new Random();
-            params.agentParams[type].randomSeed =
-                    Math.abs(r.nextLong() % 100000L);
+            long newSeed = Math.abs(r.nextLong() % 100000L); // get random number for new seed
 
+            // Update the params object
+            params.agentParams[type].randomSeed = newSeed;
+
+            agentParamTable.revalidate();
             agentParamTable.repaint();
         }
     }
