@@ -15,7 +15,7 @@ import org.cobweb.cobweb2.core.Agent;
  * agent_log.csv     - one row per agent per sampled timestep
  * excursion_log.csv - one row per messenger excursion event (departure + return)
  *
- * - No changes to original COBWEB code
+ * - Changed SimulationInternals class (added three methods) and implementations in Simulation class
  * - Controller calls logger; logger owns all I/O.
  * - Compatible with Java 1.7 (no lambdas, no streams).
  * - Excursion detection is fully internal to this class.
