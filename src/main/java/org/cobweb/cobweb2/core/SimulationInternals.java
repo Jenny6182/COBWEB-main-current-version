@@ -18,4 +18,9 @@ public interface SimulationInternals extends StatePluginSource, SimulationTimeSp
 	public AgentSimilarityCalculator getSimilarityCalculator();
 
 	public AgentListener getAgentListener();
+
+    // ADD:
+    int getInitialAgentCount(int type);
+    int getLiveAgentCount();
+    int getLiveAgentCount(int type);
 }

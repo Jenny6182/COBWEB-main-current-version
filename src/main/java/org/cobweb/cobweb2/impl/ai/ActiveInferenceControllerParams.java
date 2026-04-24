@@ -13,12 +13,16 @@ public class ActiveInferenceControllerParams extends PerAgentParams<ActiveInfere
     public ActiveInferenceControllerParams(SimulationParams simParams) {
         super(ActiveInferenceAgentParams.class);
         this.simParam = simParams;
+//        System.out.println("ActiveInferenceControllerParams constructor called!");  // ADD
+//        System.out.println("ActiveInferenceControllerParams constructor called from:");
+//        new Exception("stack trace").printStackTrace(System.out);
 
         resize(simParams);
-
         // FORCE each agent type to have its own instance
         for (int i = 0; i < agentParams.length; i++) {
-            agentParams[i] = new ActiveInferenceAgentParams(simParam);
+//            if (agentParams[i] == null) {
+                agentParams[i] = new ActiveInferenceAgentParams(simParam);
+//            }
         }
     }
 
@@ -29,6 +33,7 @@ public class ActiveInferenceControllerParams extends PerAgentParams<ActiveInfere
 
     @Override
     public Controller createController(SimulationInternals sim, int type) {
+        System.out.println("CREATE CONTROLLER seed[" + type + "] = " + agentParams[type].randomSeed);
         return new ActiveInferenceController(sim, agentParams[type]);
     }
 }

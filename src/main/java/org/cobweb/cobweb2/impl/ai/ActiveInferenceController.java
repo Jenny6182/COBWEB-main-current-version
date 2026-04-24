@@ -17,10 +17,6 @@ import java.util.Random;
 
 public class ActiveInferenceController implements Controller {
 
-    // ----------------------------------------------------------------
-    // Original fields — unchanged
-    // ----------------------------------------------------------------
-
     private double[][] A;
     private double[][][] B;
     private double[] C;
@@ -74,6 +70,9 @@ public class ActiveInferenceController implements Controller {
     private static final int ACTION_RIGHT = 2;
     private static final int ACTION_REPRODUCE = 3;
 
+    // ADD:
+    public static boolean loggerInitialized = false;
+
     // ----------------------------------------------------------------
     // Constructors — unchanged
     // ----------------------------------------------------------------
@@ -84,6 +83,23 @@ public class ActiveInferenceController implements Controller {
         this.params = params;
         this.random = new Random();
         initializeModel();
+
+        // ADD: initialize logger with params from this agent type
+        if (!loggerInitialized) {
+            String runLabel =
+//                    "curiosity=" + params.curiosity
+//                    "curiosityFixed=" + params.curiosityFixed
+                    "_population=" + simulation.getInitialAgentCount(0)
+                    // this gets the initial agent count for each type
+                    // this is specifically used for the experiment ran with same initial count
+                    // for every type of agent, so in the output dir, we'll see the pop for each agent type
+                    // for that specific run
+                    + "_seed=" + params.randomSeed;
+//                    + "_t=" + System.currentTimeMillis(); // to ensure uniqueness
+            ActiveInferenceLogger.initRun(runLabel);
+            loggerInitialized = true;
+        }
+        //
         System.out.println("Active Inference controller created!");
     }
 
@@ -196,6 +212,7 @@ public class ActiveInferenceController implements Controller {
 
     @Override
     public void controlAgent(Agent baseAgent, ControllerListener inputCallback) {
+        System.out.println("Agent curiosity: " + params.curiosity);
         System.out.println("AI tick");
         ComplexAgent agent = (ComplexAgent) baseAgent;
 

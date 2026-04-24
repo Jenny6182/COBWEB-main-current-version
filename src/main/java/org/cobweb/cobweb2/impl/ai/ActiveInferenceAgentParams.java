@@ -29,7 +29,6 @@ public class ActiveInferenceAgentParams implements ParameterSerializable {
     public double foodPreference = 1.0;
 
     public ActiveInferenceAgentParams(SimulationParams simParam) {
-        // Initialize with sim params if needed in future
     }
 
     @ConfDisplayName("Curiosity")

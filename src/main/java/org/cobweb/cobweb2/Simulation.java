@@ -40,6 +40,7 @@ import org.cobweb.cobweb2.plugins.vision.VisionMutator;
 import org.cobweb.cobweb2.plugins.waste.WasteMutator;
 import org.cobweb.cobweb2.ui.SimulationInterface;
 import org.cobweb.util.RandomNoGenerator;
+import org.cobweb.cobweb2.impl.ai.ActiveInferenceLogger;
 
 /**
  * This class provides the definitions for a user interface that is running
@@ -403,5 +404,25 @@ public class Simulation implements SimulationInternals, SimulationInterface {
 	public <T extends AgentState> boolean supportsState(Class<T> type, T value) {
 		return mutatorListener.supportsState(type, value);
 	}
+
+    // ADD:
+    @Override
+    public int getInitialAgentCount(int type) {
+        return simulationConfig.agentParams.agentParams[type].initialAgents;
+    }
+
+    @Override
+    public int getLiveAgentCount() {
+        return theEnvironment.getAgentCount();
+    }
+
+    @Override
+    public int getLiveAgentCount(int type) {
+        int count = 0;
+        for (Agent agent : theEnvironment.getAgents()) {
+            if (agent.getType() == type) count++;
+        }
+        return count;
+    }
 
 }

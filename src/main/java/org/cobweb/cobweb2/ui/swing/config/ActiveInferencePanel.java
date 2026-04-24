@@ -27,11 +27,9 @@ public class ActiveInferencePanel extends SettingsPanel {
     public void bindToParser(SimulationConfig p) {
         if (!(p.controllerParams instanceof ActiveInferenceControllerParams)) {
             p.setControllerName(ActiveInferenceController.class.getName());
+                p.controllerParams = params;
         }
-
-        // ALWAYS use the params from SimulationConfig (source of truth)
         params = (ActiveInferenceControllerParams) p.controllerParams;
-
         updateBoxes();
     }
 
@@ -92,6 +90,19 @@ public class ActiveInferencePanel extends SettingsPanel {
 
         revalidate();
         repaint();
+    }
+
+    @Override
+    public void setVisible(boolean visible) {
+        if (!visible) {
+            // commit any in-progress table edits before hiding
+            Component focused = KeyboardFocusManager
+                    .getCurrentKeyboardFocusManager().getFocusOwner();
+            if (focused instanceof JComponent) {
+                ((JComponent) focused).transferFocus();
+            }
+        }
+        super.setVisible(visible);
     }
 
     private final class NewSeedAction extends AbstractAction {

@@ -5,25 +5,24 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.Map;
+import org.cobweb.cobweb2.core.Agent;
 
 /**
- * Singleton data logger for Active Inference simulation.
+ * One data logger for Active Inference simulation.
  *
  * Writes three CSV files simultaneously:
  * system_log.csv    - one row per timestep, macro/thermodynamic quantities
  * agent_log.csv     - one row per agent per sampled timestep
  * excursion_log.csv - one row per messenger excursion event (departure + return)
  *
- * Design principles:
- * - No changes to original COBWEB code required.
+ * - No changes to original COBWEB code
  * - Controller calls logger; logger owns all I/O.
  * - Compatible with Java 1.7 (no lambdas, no streams).
  * - Excursion detection is fully internal to this class.
  */
 public class ActiveInferenceLogger {
 
-    // -----------------------------------------------------------------------
-    // Singleton
+    // The data logger
     // -----------------------------------------------------------------------
 
     private static ActiveInferenceLogger instance;
@@ -35,7 +34,6 @@ public class ActiveInferenceLogger {
         return instance;
     }
 
-    // -----------------------------------------------------------------------
     // Configuration
     // -----------------------------------------------------------------------
 
@@ -61,10 +59,8 @@ public class ActiveInferenceLogger {
      */
     public String outputDir = "ai_logs/";
 
-    // -----------------------------------------------------------------------
     // Internal state
     // -----------------------------------------------------------------------
-
     private PrintWriter systemWriter;
     private PrintWriter agentWriter;
     private PrintWriter excursionWriter;
@@ -84,8 +80,7 @@ public class ActiveInferenceLogger {
 
     private int lastSystemTimestep = -1;
 
-    // -----------------------------------------------------------------------
-    // Inner helper classes
+    // helper classes
     // -----------------------------------------------------------------------
 
     /** Tracks one agent's excursion (messenger) state across timesteps. */
@@ -107,12 +102,29 @@ public class ActiveInferenceLogger {
         int excursionCount = 0;
     }
 
-    // -----------------------------------------------------------------------
     // Initialization
     // -----------------------------------------------------------------------
 
     private ActiveInferenceLogger() {
         // private: use getInstance()
+    }
+
+    public static void initRun(String runLabel) {
+        // TRYING to fix folder issue
+//        if (instance != null) {
+//            instance.close();
+//        }
+//
+//        instance = new ActiveInferenceLogger();
+//
+//        instance.outputDir = "ai_logs/" + runLabel + "/";
+//        instance.initialized = false;
+//
+//        ActiveInferenceController.loggerInitialized = false;
+        ActiveInferenceLogger logger = getInstance();
+        logger.outputDir = "ai_logs/" + runLabel + "/";
+        logger.initialized = false;  // force re-init with new directory
+        ActiveInferenceController.loggerInitialized = false; // reset for next run
     }
 
     /**
@@ -194,7 +206,6 @@ public class ActiveInferenceLogger {
         excursionWriter.flush();
     }
 
-    // -----------------------------------------------------------------------
     // Public API
     // -----------------------------------------------------------------------
 
@@ -344,7 +355,6 @@ public class ActiveInferenceLogger {
         instance = null;
     }
 
-    // -----------------------------------------------------------------------
     // Excursion tracking (internal)
     // -----------------------------------------------------------------------
 
@@ -392,7 +402,6 @@ public class ActiveInferenceLogger {
         }
     }
 
-    // -----------------------------------------------------------------------
     // Derived quantities (computed internally)
     // -----------------------------------------------------------------------
 
@@ -423,7 +432,6 @@ public class ActiveInferenceLogger {
         return entropy;
     }
 
-    // -----------------------------------------------------------------------
     // Utility
     // -----------------------------------------------------------------------
 
